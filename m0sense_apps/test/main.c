@@ -4,42 +4,50 @@
 #ifdef M0SENSE_USE_USBSTDIO
 #include <usb_stdio.h>
 #endif
-
-#define BSP_UART_CLOCK_SOURCE  ROOT_CLOCK_SOURCE_PLL_96M
-#define BSP_UART_CLOCK_DIV  0
+#include "hal_adc.h"
 
 #define CONFIG_GPIO14_FUNC GPIO_FUN_UART0_TX
-#define CONFIG_GPIO15_FUNC GPIO_FUN_UART0_RX
-#define BSP_USING_UART0
 
-#if defined(BSP_USING_UART0)
-#ifndef UART0_CONFIG
-#define UART0_CONFIG \
-{   \
-.id = 0, \
-.baudrate = 2000000,\
-.databits = UART_DATA_LEN_8, \
-.stopbits = UART_STOP_ONE, \
-.parity = UART_PAR_NONE, \
-.fifo_threshold = 1, \
-}
-#endif
-#endif
+//Redefine the CONFIG_GPIO15_FUNC in the bl702_iot/pinmux_config.h, which is located in sub-module
+//#define CONFIG_GPIO15_FUNC GPIO_FUN_ANALOG
 
+
+//According to the RM, the GPIO15 could use ADC_CH1
+adc_channel_t posChList[] = { ADC_CHANNEL1 };
+adc_channel_t negChList[] = { ADC_CHANNEL_GND };
+
+adc_channel_val_t result_val;
+
+
+struct device *adc_dev;
 int main(void)
 {
     bflb_platform_init(0);
-    MSG_DBG(
-        "Now can use MSG_xxx, LOG_xxx and bflb_platform_printf on uart.\r\n");  // just appear on uart unless use printf
 
-#ifdef M0SENSE_USE_USBSTDIO
-    usb_stdio_init();                                        // MUST be called before any call to printf or puts
-    printf("Now can use printf, puts on usb_cdc_acm.\r\n");  // on usb, ttyACMx on Linux or COMx on Windows.
-#endif
+    adc_channel_cfg_t adc_channel_cfg;
+
+    adc_channel_cfg.pos_channel = posChList;
+    adc_channel_cfg.neg_channel = negChList;
+    adc_channel_cfg.num = 1;
+
+    adc_register(ADC0_INDEX, "adc");
+
+    adc_dev = device_find("adc");
+
+    if (adc_dev) {
+        device_open(adc_dev, DEVICE_OFLAG_STREAM_RX);
+        if (device_control(adc_dev, DEVICE_CTRL_ADC_CHANNEL_CONFIG, &adc_channel_cfg) == ERROR) {
+            MSG("ADC channel config error , Please check the channel corresponding to IO is initial success by board system or Channel is invaild \r\n");
+            while (1)
+                ;
+        }
+        MSG("adc device find success\r\n");
+    }
 
     while (1) {
-        printf("hello, world\r\n");
-        MSG_DBG("Test!\n");
-        bflb_platform_delay_ms(2000);
+        adc_channel_start(adc_dev);
+        device_read(adc_dev, 0, (void *)&result_val, 1); /*max size is 32*/
+        MSG("PosId = %d Value = %d Volt = %d mV \r\n", result_val.posChan, result_val.value, (uint32_t)(result_val.volt * 1000));
+        bflb_platform_delay_ms(500);
     }
 }
