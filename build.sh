@@ -1,5 +1,5 @@
 # y for printf on usb_cdc_acm and n for printf on uart 
-SUPPORT_USBSTDIO_ENABLE=y
+SUPPORT_USBSTDIO_ENABLE=n
 
 
 APP=rtos_demo
